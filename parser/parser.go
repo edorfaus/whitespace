@@ -26,7 +26,7 @@ func splitFunc(data []byte, atEOF bool) (int, []byte, error) {
 	for i := 0; i < len(data); i++ {
 		switch data[i] {
 		case ' ', '\t', '\n':
-			return i, data[i : i+1], nil
+			return i + 1, data[i : i+1], nil
 		}
 	}
 	return len(data), nil, nil
