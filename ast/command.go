@@ -38,4 +38,7 @@ const (
 	CmdOutNumber
 	CmdReadChar
 	CmdReadNumber
+
+	// Total count of commands
+	CountCmds
 )

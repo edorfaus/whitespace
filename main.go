@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/edorfaus/whitespace/interp"
 	"github.com/edorfaus/whitespace/parser"
 )
 
@@ -19,17 +20,28 @@ func run() error {
 	if len(os.Args) > 1 {
 		fn = os.Args[1]
 	}
-	err := parseFile(fn)
+	p, err := parseFile(fn)
 	if err != nil {
 		return err
 	}
+
+	vm := interp.NewVM(p.Commands)
+	if vm.Err != nil {
+		return vm.Err
+	}
+
+	vm.Run()
+	if vm.Err != nil {
+		return vm.Err
+	}
+
 	return nil
 }
 
-func parseFile(fn string) (retErr error) {
+func parseFile(fn string) (par *parser.Parser, retErr error) {
 	f, err := os.Open(fn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() {
 		if err := f.Close(); err != nil && retErr == nil {
@@ -40,7 +52,5 @@ func parseFile(fn string) (retErr error) {
 	p := parser.New(f)
 	p.Parse()
 
-	fmt.Println("Commands:", p.Commands)
-
-	return p.Err()
+	return p, p.Err()
 }
