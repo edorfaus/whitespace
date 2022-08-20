@@ -14,7 +14,7 @@ func DefaultWriteChar(r rune) error {
 }
 
 func DefaultWriteNumber(n int64) error {
-	_, err := fmt.Printf("%d\n", n)
+	_, err := fmt.Printf("%d", n)
 	return err
 }
 
