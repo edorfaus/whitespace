@@ -10,13 +10,18 @@ import (
 )
 
 type Parser struct {
+	Commands []ast.Command
+
+	state state
+
 	src *bufio.Scanner
 	err error
 }
 
 func New(r io.Reader) *Parser {
 	p := &Parser{
-		src: bufio.NewScanner(r),
+		state: stateStart,
+		src:   bufio.NewScanner(r),
 	}
 	p.src.Split(splitFunc)
 	return p
@@ -33,60 +38,42 @@ func splitFunc(data []byte, atEOF bool) (int, []byte, error) {
 }
 
 func (p *Parser) Err() error {
-	if p.err != nil {
-		return p.err
-	}
-	return p.src.Err()
+	return p.err
 }
 
 func (p *Parser) Parse() {
-	imp := p.parseIMP()
-	fmt.Println("IMP:", imp)
-}
-
-func (p *Parser) parseIMP() ast.Imp {
-	b := p.next()
-	switch b {
-	case ' ':
-		return ast.ImpStackManip
-	case '\n':
-		return ast.ImpFlowControl
-	case '\t':
-		b = p.next()
-		switch b {
-		case ' ':
-			return ast.ImpArithmetic
-		case '\t':
-			return ast.ImpHeapAccess
-		case '\n':
-			return ast.ImpIO
-		case 0:
-			p.unexpectedEOF("IMP")
-			return ast.ImpNone
-		default:
-			p.badByte(b)
-			return ast.ImpNone
-		}
-	case 0:
-		return ast.ImpNone
-	default:
-		p.badByte(b)
-		return ast.ImpNone
+	for p.err == nil && p.src.Scan() {
+		b := p.src.Bytes()[0]
+		p.state.f(p, b)
+	}
+	if p.err == nil {
+		p.err = p.src.Err()
+	}
+	if p.err == nil && p.state.n != stateStart.n {
+		p.fail("unexpected EOF in state %v", p.state.n)
 	}
 }
 
+func (p *Parser) addCommand(c ast.Cmd, a interface{}) {
+	p.Commands = append(p.Commands, ast.Command{Cmd: c, Arg: a})
+	p.state = stateStart
+}
+
 func (p *Parser) parseLabel() string {
+	if p.err != nil {
+		return ""
+	}
 	var sb strings.Builder
 	for {
-		b := p.next()
+		if !p.mustScan("a label") {
+			return ""
+		}
+		b := p.src.Bytes()[0]
 		switch b {
 		case ' ', '\t':
 			sb.WriteByte(b)
 		case '\n':
 			return sb.String()
-		case 0:
-			p.unexpectedEOF("label")
-			return ""
 		default:
 			p.badByte(b)
 			return ""
@@ -94,11 +81,92 @@ func (p *Parser) parseLabel() string {
 	}
 }
 
-func (p *Parser) next() byte {
-	if p.err == nil && p.src.Scan() {
-		return p.src.Bytes()[0]
+func (p *Parser) parseNumber() int64 {
+	if p.err != nil {
+		return 0
 	}
-	return 0
+
+	// First read the sign byte
+	if !p.mustScan("sign for number") {
+		return 0
+	}
+	neg := false
+	b := p.src.Bytes()[0]
+	switch b {
+	case ' ':
+		// positive
+	case '\t':
+		neg = true
+	case '\n':
+		p.fail("unexpected LF, expected a sign (space/tab)")
+		return 0
+	default:
+		p.badByte(b)
+		return 0
+	}
+
+	// Then skip leading zeroes
+	for {
+		if !p.mustScan("a number") {
+			return 0
+		}
+		b = p.src.Bytes()[0]
+		if b != ' ' {
+			break
+		}
+	}
+	switch b {
+	case '\t':
+		// non-0 value
+	case '\n':
+		// all-0 value
+		return 0
+	case ' ':
+		// cannot happen
+		p.fail("code error: should never get here")
+		return 0
+	default:
+		p.badByte(b)
+		return 0
+	}
+
+	// Next, read the number (as far as it fits)
+	value := int64(1)
+	bits := 1
+	for {
+		if !p.mustScan("a number") {
+			return 0
+		}
+		b = p.src.Bytes()[0]
+		switch b {
+		case ' ':
+			bits++
+			value <<= 1
+		case '\t':
+			bits++
+			value = (value << 1) | 1
+		case '\n':
+			if neg {
+				return -value
+			}
+			return value
+		default:
+			p.badByte(b)
+			return 0
+		}
+		if bits > 63 {
+			p.fail("number too large for implementation (>63 bits)")
+			return 0
+		}
+	}
+}
+
+func (p *Parser) mustScan(during string) bool {
+	if p.err == nil && !p.src.Scan() {
+		p.err = p.src.Err()
+		p.unexpectedEOF(during)
+	}
+	return p.err == nil
 }
 
 func (p *Parser) fail(format string, args ...interface{}) {
@@ -110,6 +178,10 @@ func (p *Parser) fail(format string, args ...interface{}) {
 
 func (p *Parser) badByte(b byte) {
 	p.fail("unexpected byte from scanner: %02X '%c'", b, b)
+}
+
+func (p *Parser) badCommand(what string) {
+	p.fail("invalid command: %v", what)
 }
 
 func (p *Parser) unexpectedEOF(during string) {

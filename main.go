@@ -40,5 +40,7 @@ func parseFile(fn string) (retErr error) {
 	p := parser.New(f)
 	p.Parse()
 
+	fmt.Println("Commands:", p.Commands)
+
 	return p.Err()
 }
