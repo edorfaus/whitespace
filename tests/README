@@ -1,0 +1,25 @@
+This folder contains a basic test suite for Whitespace interpreters.
+
+This test suite is intended to verify the operation of each instruction
+of a Whitespace interpreter, via basic black-box testing.
+
+The suite consists of a test runner and a set of test cases, with each
+test case being a separate Whitespace source file, that also contains
+comments describing both the program itself and its expected output.
+
+It only assumes these things about the interpreter being tested:
+- it takes the name of the program file to be executed as an argument
+- it uses stdin and stdout for the program's input and output
+- it reads and outputs numbers in decimal form
+
+The first few tests try to verify that exit, push and output works, as
+all the rest of the tests rely on this (out of necessity, due to the
+black-box nature of the test suite). If any one of those fails, the rest
+of the tests are likely to show spurious failures.
+
+The current test runner script assumes the interpreter is in the current
+working directory, and that the test cases are in the same directory as
+the test runner (which is not necessarily the CWD). It looks for an
+executable file named "whitespace" or "direct", and if not found, uses
+"go run ." as the interpreter. The code for this is at the top of the
+script file, to be easy to change if you need to do so.
